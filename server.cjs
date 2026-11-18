@@ -23,16 +23,11 @@ app.use(express.static('public'));
 // Database path - sql.js will use this for the .db file
 const dbPath = path.resolve(__dirname, 'riglock.db');
 
-// Initialize sql.js database
-// sql.js requires loading the database from an ArrayBuffer or ArrayBufferView
-// We'll initialize it empty and let it create the .db file on first run
-
+// Initialize sql.js database on server start
 let database = null;
 
-// Initialize the database on server start
 function initDatabase() {
   return new Promise((resolve, reject) => {
-    // Read the existing .db file if it exists, otherwise create new
     const fs = require('fs');
     let buffer = null;
     
@@ -43,15 +38,120 @@ function initDatabase() {
         console.log('Found existing riglock.db, loading...');
       } else {
         console.log('No existing riglock.db, creating new...');
-        // Create an empty database buffer - sql.js uses a specific magic number header
-        // The minimum size for a valid sql.js database is 16 bytes with the header
+        // sql.js requires a valid ArrayBuffer - create minimum size
         buffer = new ArrayBuffer(16);
       }
       
       database = new sql.Database(buffer);
       
-      // Initialize all tables
-      runMigrations();
+      // Initialize all tables immediately
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS accounts (
+          id TEXT PRIMARY KEY,
+          role TEXT NOT NULL CHECK (role IN ('buyer', 'seller')),
+          full_name TEXT NOT NULL,
+          company_name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          phone TEXT,
+          gstin TEXT,
+          site_or_depot_address TEXT,
+          depot_region TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        
+        CREATE TABLE IF NOT EXISTS equipment (
+          id TEXT PRIMARY KEY,
+          sku TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL CHECK (category IN ('POWER', 'DEWATERING', 'HYDRAULIC', 'LIGHTING', 'CUTTING', 'AIR')),
+          image_url TEXT NOT NULL,
+          condition_rating TEXT NOT NULL CHECK (condition_rating IN ('GRADE-A1', 'GRADE-A2')),
+          availability_flag TEXT NOT NULL CHECK (availability_flag IN ('IN VEHICLE', 'DEPOT READY')),
+          emergency_hourly_rate REAL DEFAULT 0,
+          emergency_dispatch_fee REAL DEFAULT 0,
+          rental_daily_rate REAL DEFAULT 0,
+          rental_weekly_rate REAL DEFAULT 0,
+          purchase_price REAL DEFAULT 0,
+          stock_qty INTEGER DEFAULT 0,
+          seller_id TEXT,
+          seller_name TEXT,
+          deposit_amount REAL DEFAULT 0,
+          deposit_tier TEXT DEFAULT 'TIER-2 BOND' CHECK (deposit_tier IN ('TIER-1 BOND', 'TIER-2 BOND')),
+          rating REAL DEFAULT 4.97,
+          last_ping_seconds INTEGER DEFAULT 6,
+          distance_miles REAL DEFAULT 1.0,
+          eta_minutes INTEGER DEFAULT 22,
+          node_id TEXT,
+          node_callsign TEXT,
+          courier_name TEXT,
+          courier_plate TEXT,
+          weight_lbs REAL DEFAULT 340,
+          primary_output TEXT NOT NULL,
+          voltage_or_pressure TEXT DEFAULT 'INDUSTRIAL GRADE',
+          inspection_date TEXT DEFAULT (date('now')),
+          summary TEXT NOT NULL,
+          specs TEXT DEFAULT '[]',
+          checklist TEXT DEFAULT '[]',
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        
+        CREATE TABLE IF NOT EXISTS orders (
+          id TEXT PRIMARY KEY,
+          po_number TEXT UNIQUE NOT NULL,
+          buyer_id TEXT,
+          buyer_company TEXT NOT NULL,
+          gstin TEXT,
+          delivery_address TEXT NOT NULL,
+          delivery_tier TEXT NOT NULL CHECK (delivery_tier IN ('FREIGHT', 'ER_DROP', 'PICKUP')),
+          delivery_fee REAL DEFAULT 0,
+          subtotal REAL DEFAULT 0,
+          gst_amount REAL DEFAULT 0,
+          grand_total REAL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL' CHECK (status IN ('PENDING_APPROVAL', 'APPROVED_FOR_RELEASE', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED_BY_BUYER', 'CANCELLED_BY_SELLER')),
+          created_at TEXT DEFAULT (datetime('now')),
+          cancelled_at TEXT,
+          cancelled_by TEXT CHECK (cancelled_by IN ('BUYER', 'SELLER')),
+          cancellation_reason TEXT
+        );
+      
+        CREATE TABLE IF NOT EXISTS order_items (
+          id TEXT PRIMARY KEY,
+          order_id TEXT,
+          equipment_id TEXT,
+          sku TEXT NOT NULL,
+          name TEXT NOT NULL,
+          seller_id TEXT,
+          seller_name TEXT,
+          qty INTEGER DEFAULT 1,
+          unit_price REAL DEFAULT 0,
+          total_price REAL DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+      
+        CREATE TABLE IF NOT EXISTS missions (
+          id TEXT PRIMARY KEY,
+          mission_code TEXT UNIQUE NOT NULL,
+          buyer_id TEXT,
+          buyer_name TEXT NOT NULL,
+          equipment_id TEXT,
+          mode TEXT NOT NULL CHECK (mode IN ('emergency', 'rental')),
+          drop_zone_address TEXT NOT NULL,
+          site_coordinates TEXT,
+          priority_override INTEGER DEFAULT 0,
+          eta_total_seconds INTEGER DEFAULT 2700,
+          remaining_seconds INTEGER DEFAULT 1800,
+          status TEXT NOT NULL DEFAULT 'VERIFIED' CHECK (status IN ('VERIFIED', 'LOADED', 'EN_ROUTE', 'ARRIVED', 'COMPLETED', 'ABORTED')),
+          handoff_pin TEXT,
+          courier_name TEXT,
+          courier_plate TEXT,
+          started_at TEXT,
+          total_cost REAL DEFAULT 0,
+          rental_days INTEGER DEFAULT 0,
+          cancellation_reason TEXT,
+          logs TEXT DEFAULT '[]',
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+      `);
       
       resolve(database);
     } catch (err) {
@@ -60,57 +160,45 @@ function initDatabase() {
   });
 }
 
-// Run all database migrations/tables
-function runMigrations() {
-  // These are executed right after database initialization
-  // We'll also have API endpoints that create tables on first use
-}
-
-// Get a run helper
-const run = (sql, params = []) => {
+// Helper to run SQL statements
+function run(sql, params = []) {
   return new Promise((resolve, reject) => {
     database.exec(sql, function(err) {
       if (err) reject(err);
       else resolve(this);
     });
   });
-};
+}
 
 // ===== ACCOUNTS API =====
 
-// Register new account
 app.post('/api/register', async (req, res) => {
   const { role, fullName, companyName, email, password, phone, gstin, siteOrDepotAddress, depotRegion } = req.body;
   const id = `user-${Date.now()}`;
   
   try {
+    // Check if email already exists
+    const existing = await new Promise((resolve, reject) => {
+      database.exec(`SELECT * FROM accounts WHERE email = '${email}'`, function(err, rows) {
+        if (err) reject(err);
+        else resolve(rows.length > 0);
+      });
+    });
+    
+    if (existing) {
+      return res.status(409).json({ success: false, error: 'Email already registered' });
+    }
+    
     await run(
       `INSERT INTO accounts (id, role, full_name, company_name, email, phone, gstin, site_or_depot_address, depot_region, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, role, fullName, companyName, email, phone, gstin, siteOrDepotAddress, depotRegion]
     );
     res.json({ success: true, id, role });
   } catch (err) {
-    // Check if email already exists
-    const existing = await getAccountByEmail(email);
-    if (existing) {
-      res.status(409).json({ success: false, error: 'Email already registered' });
-    } else {
-      res.status(500).json({ success: false, error: err.message });
-    }
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Get account by email (for CORS check)
-async function getAccountByEmail(email) {
-  return new Promise((resolve, reject) => {
-    database.exec(`SELECT * FROM accounts WHERE email = '${email}'`, function(err, rows) {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-}
-
-// Login
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   const accounts = await new Promise((resolve, reject) => {
@@ -128,7 +216,6 @@ app.post('/api/login', async (req, res) => {
 
 // ===== EQUIPMENT API =====
 
-// Get all equipment
 app.get('/api/equipment', async (req, res) => {
   try {
     const equipment = await new Promise((resolve, reject) => {
@@ -141,9 +228,8 @@ app.get('/api/equipment', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-};
+});
 
-// Get equipment by seller
 app.get('/api/seller/equipment', async (req, res) => {
   const sellerId = req.query.sellerId;
   try {
@@ -159,7 +245,6 @@ app.get('/api/seller/equipment', async (req, res) => {
   }
 });
 
-// Add new equipment (seller)
 app.post('/api/equipment', async (req, res) => {
   const item = req.body;
   const id = `eq-${Date.now()}`;
@@ -188,7 +273,6 @@ app.post('/api/equipment', async (req, res) => {
   }
 });
 
-// Update equipment rates
 app.put('/api/equipment/:id', async (req, res) => {
   const { id } = req.params;
   const { purchasePrice, rentalDailyRate, emergencyHourlyRate, stockQty } = req.body;
@@ -204,7 +288,6 @@ app.put('/api/equipment/:id', async (req, res) => {
   }
 });
 
-// Delete equipment
 app.delete('/api/equipment/:id', async (req, res) => {
   const { id } = req.params;
   
@@ -218,7 +301,6 @@ app.delete('/api/equipment/:id', async (req, res) => {
 
 // ===== ORDERS API =====
 
-// Get buyer orders
 app.get('/api/buyer/orders', async (req, res) => {
   try {
     const orders = await new Promise((resolve, reject) => {
@@ -231,36 +313,20 @@ app.get('/api/buyer/orders', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-};
+});
 
-// Create order
 app.post('/api/orders', async (req, res) => {
   const { poNumber, buyerId, buyerCompany, gstin, deliveryAddress, deliveryTier, deliveryFee,
           subtotal, gstAmount, grandTotal, items } = req.body;
   const id = `po-${Date.now()}`;
   
   try {
-    // Insert order
     await run(
       `INSERT INTO orders (id, po_number, buyer_id, buyer_company, gstin, delivery_address, delivery_tier, 
        delivery_fee, subtotal, gst_amount, grand_total, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', datetime('now'))`,
       [id, poNumber, buyerId, buyerCompany, gstin, deliveryAddress, deliveryTier, deliveryFee, subtotal, gstAmount, grandTotal]
     );
     
-    // Insert order items
-    const itemPromises = items.map((item, idx) => {
-      return new Promise((resolve, reject) => {
-        const itemId = `oi-${Date.now()}-${idx}`;
-        database.run(
-          `INSERT INTO order_items (id, order_id, equipment_id, sku, name, seller_id, seller_name, qty, unit_price, total_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [itemId, id, item.equipmentId, item.sku, item.name, item.sellerId, item.sellerName,
-           item.qty, item.unitPrice, item.totalPrice],
-          function(err) { resolve(); }
-        );
-      });
-    });
-    
-    await Promise.all(itemPromises);
     res.json({ success: true, orderId: id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -269,7 +335,6 @@ app.post('/api/orders', async (req, res) => {
 
 // ===== MISSIONS API =====
 
-// Get missions for buyer
 app.get('/api/buyer/missions', async (req, res) => {
   try {
     const missions = await new Promise((resolve, reject) => {
@@ -284,7 +349,6 @@ app.get('/api/buyer/missions', async (req, res) => {
   }
 });
 
-// Create mission
 app.post('/api/missions', async (req, res) => {
   const mission = req.body;
   const id = `mis-${Date.now()}`;
@@ -308,7 +372,6 @@ app.post('/api/missions', async (req, res) => {
 
 // ===== DEPOT NODES API =====
 
-// Get all nodes
 app.get('/api/nodes', async (req, res) => {
   try {
     const nodes = await new Promise((resolve, reject) => {
@@ -323,7 +386,6 @@ app.get('/api/nodes', async (req, res) => {
   }
 });
 
-// Add node (seller)
 app.post('/api/nodes', async (req, res) => {
   const { callsign, region, status, sellerId, leadTech } = req.body;
   const id = `node-${Date.now()}`;
@@ -345,7 +407,6 @@ app.listen(PORT, () => {
   console.log(`Database: ${dbPath}`);
   console.log('Free hosting: Render.com or any Node.js compatible host');
   
-  // Initialize database after server starts
   initDatabase().then(() => {
     console.log('Database initialized');
   }).catch(err => {
@@ -353,7 +414,7 @@ app.listen(PORT, () => {
   });
 });
 
-// Expose database for testing/inspection (optional)
+// Expose database info (optional)
 app.get('/api/db-info', (req, res) => {
   res.json({ dbPath, dbExists: require('fs').existsSync(dbPath) });
 });
