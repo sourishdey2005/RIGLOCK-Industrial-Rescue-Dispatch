@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bebas Neue", Impact, sans-serif;
+  --font-sans: "Chivo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-canvas: #131410;
+  --color-plate: #1A1A1A;
+  --color-plate-elevated: #242424;
+  --color-track: #2A2A2A;
+  --color-signal-orange: #FF5A1F;
+  --color-safety-lime: #C6FF3D;
+  --color-alert-red: #FF2E2E;
+  --color-off-white: #F4F1EA;
+  --color-muted-slate: #8E8D88;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-radius: 0px !important;
+  }
+
+  html {
+    background-color: #131410;
+    color: #F4F1EA;
+    font-family: "Chivo", system-ui, sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: #131410;
+    color: #F4F1EA;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+}
+
+.font-display {
+  font-family: "Bebas Neue", Impact, sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.font-mono-tabular {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hard-edge mechanical shadows & switch actuation */
+.shadow-hard {
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.shadow-hard-sm {
+  box-shadow: 2px 2px 0px #000000;
+}
+
+.btn-dispatch {
+  background-color: #FF5A1F;
+  color: #121212;
+  border: 2px solid #0D0D0D;
+  box-shadow: 4px 4px 0px #000000;
+  transition: transform 90ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 90ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 120ms ease;
+}
+
+.btn-dispatch:hover:not(:disabled) {
+  background-color: #ff6e3a;
+}
+
+.btn-dispatch:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px #000000;
+}
+
+.btn-dispatch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary-mech {
+  background-color: #1A1A1A;
+  color: #F4F1EA;
+  border: 2px solid #F4F1EA;
+  box-shadow: 4px 4px 0px #000000;
+  transition: transform 90ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 90ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 120ms ease;
+}
+
+.btn-secondary-mech:hover:not(:disabled) {
+  background-color: #242424;
+}
+
+.btn-secondary-mech:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px #000000;
+}
+
+.btn-override-mech {
+  background-color: #FF2E2E;
+  color: #121212;
+  border: 2px solid #0D0D0D;
+  box-shadow: 4px 4px 0px #000000;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(13, 13, 13, 0.14),
+    rgba(13, 13, 13, 0.14) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  transition: transform 90ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 90ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-override-mech:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px #000000;
+}
+
+/* Halftone dot field for live telemetry indicators */
+.bg-halftone-lime {
+  background-color: #C6FF3D;
+  background-image: radial-gradient(rgba(18, 18, 18, 0.22) 1px, transparent 1px);
+  background-size: 4px 4px;
+  color: #121212;
+}
+
+.bg-halftone-dark {
+  background-color: #1A1A1A;
+  background-image: radial-gradient(rgba(244, 241, 234, 0.08) 1px, transparent 1px);
+  background-size: 6px 6px;
+}
+
+.bg-tactical-grid {
+  background-color: #131410;
+  background-image:
+    linear-gradient(to right, rgba(42, 42, 42, 0.42) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(42, 42, 42, 0.42) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.chamfer-tr {
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}
+
+.chamfer-tag {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+
+.hazard-strip {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #FF2E2E,
+    #FF2E2E 8px,
+    #121212 8px,
+    #121212 16px
+  );
+}
+
+/* Focus rules for inputs & controls */
+.input-tactical {
+  background-color: #1A1A1A;
+  border: 2px solid #2A2A2A;
+  color: #F4F1EA;
+  transition: border-color 100ms ease, box-shadow 100ms ease;
+}
+
+.input-tactical::placeholder {
+  color: #8E8D88;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+}
+
+.input-tactical:focus {
+  outline: none;
+  border-color: #C6FF3D;
+  box-shadow: 2px 2px 0px #000000;
+}
+
+/* Custom scrollbar for dark industrial consoles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #131410;
+}
+::-webkit-scrollbar-thumb {
+  background: #2A2A2A;
+  border: 1px solid #131410;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF5A1F;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "RIGLOCK — Industrial Rescue Dispatch",
+  "description": "Emergency-grade hardware dispatch and industrial equipment triage marketplace for field engineers, contractors, and first-response technicians.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
