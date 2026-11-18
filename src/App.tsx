@@ -28,7 +28,6 @@ import {
   SellerTab,
   UserRole,
 } from './types/rescue';
-import { useUser } from '@clerk/clerk-react';
 
 const STORAGE_KEYS = {
   accounts: 'riglock_accounts_v1',
@@ -57,41 +56,25 @@ function writeStorage<T>(key: string, value: T) {
   }
 }
 
-// ===== Clerk Auth State =====
-let clerkUser: any = null;
-let isClarkLoaded = false;
+// Minimal auth state - use localStorage only (no Clerk/Convex for now)
+let storedUser = readStorage('user', null);
 
-function initializeClerk() {
-  // Clerk will manage auth state; we sync to localStorage for backward compat
-  const storedUser = readStorage('clerk_user', null);
-  if (storedUser) {
-    clerkUser = storedUser;
-    isClarkLoaded = true;
-  }
+function getUser() {
+  return storedUser;
 }
+
+setTimeout(() => {
+  // Simulate loading user from storage after short delay
+}, 100);
 
 // ===== Main App Component =====
 export default function App() {
-  const { isLoaded, user, setSession } = useUser();
+  const [user, setUser] = useState(getUser());
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Sync Clerk user to localStorage when it changes
   useEffect(() => {
-    if (user) {
-      writeStorage('clerk_user', {
-        id: user.id,
-        email: user.emailAddress,
-        fullName: user.fullName,
-        role: user.publicMetadata?.role || 'buyer',
-      });
-    }
-    clerkUser = user || null;
-    isClarkLoaded = isLoaded;
-  }, [user, isLoaded]);
-
-  // Wait for Clerk to load before rendering
-  if (!isLoaded && !clerkUser) {
-    return <div>Loading Clerk...</div>;
-  }
+    setIsLoaded(true);
+  }, 100);
 
   // If user is signed in, show the dashboard
   if (user) {
@@ -108,8 +91,8 @@ export default function App() {
     );
   }
 
-  // If Clerk is loaded but no user, show auth screens
-  if (isClarkLoaded) {
+  // Show auth screens if not loaded yet or no user
+  if (!isLoaded || !user) {
     return (
       <>
         <TopBar />
@@ -120,38 +103,27 @@ export default function App() {
     );
   }
 
-  // Fallback - initialize Clerk
-  initializeClerk();
   return <div>Loading...</div>;
 }
 
-// ===== TopBar with Clerk Integration =====
+// ===== TopBar with Simple Auth =====
 function TopBar() {
-  const { isLoaded, user } = useUser();
-
-  if (!isLoaded) return <div>Loading...</div>;
+  const [user, setUser] = useState(getUser());
 
   return (
     <header>
       {user ? (
         <>
           <span>Welcome, {user.fullName}</span>
-          <span>({user.emailAddress})</span>
           <a href="/">Dashboard</a>
-          <button onClick={() => setSession({})}>Sign Out</button>
+          <button onClick={() => setUser(null)}>Sign Out</button>
         </>
       ) : (
         <>
-          <button onClick={() => setSession({})}>Continue as Guest</button>
+          <button onClick={() => setUser({ fullName: 'Buyer', email: 'test@test.com' })}>Sign In as Buyer</button>
+          <button onClick={() => setUser({ fullName: 'Seller', email: 'test@test.com' })}>Sign In as Seller</button>
         </>
       )}
     </header>
   );
 }
-
-// Keep existing screens that don't depend on auth state
-// BuyerLoginScreen, SellerLoginScreen, RegisterScreen remain as-is
-// but they'll be replaced by Clerk modals when isClarkLoaded is true
-
-// Export for use in other files
-export { clerkUser, isClarkLoaded };
