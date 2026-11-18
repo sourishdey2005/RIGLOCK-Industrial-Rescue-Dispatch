@@ -11,8 +11,11 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Middleware
-app.use(cors({ origin: '*' }));
+// Middleware - CORS configured for Vercel frontend
+const allowedOrigins = process.env.CORS_ORIGIN 
+  ? [process.env.CORS_ORIGIN] 
+  : ['https://riglock-industrysite.vercel.app', 'http://localhost:3000'];
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use(express.static('public'));
 
