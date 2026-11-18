@@ -4,7 +4,7 @@
 // Frontend: Vercel (https://riglock-industrysite.vercel.app/)
 
 const express = require('express');
-const sql = require('sql.js');
+const SQL = require('sql.js');  // Fixed: use SQL (capital S)
 const path = require('path');
 const cors = require('cors');
 require('dotenv').config();
@@ -23,7 +23,8 @@ app.use(express.static('public'));
 // Database path - sql.js will use this for the .db file
 const dbPath = path.resolve(__dirname, 'riglock.db');
 
-// Initialize sql.js database on server start
+// Initialize sql.js database
+// sql.js requires loading the database from an ArrayBuffer
 let database = null;
 
 function initDatabase() {
@@ -38,11 +39,14 @@ function initDatabase() {
         console.log('Found existing riglock.db, loading...');
       } else {
         console.log('No existing riglock.db, creating new...');
-        // sql.js requires a valid ArrayBuffer - create minimum size
-        buffer = new ArrayBuffer(16);
+        // sql.js requires a valid ArrayBuffer - create proper header
+        // sql.js database header is 16 bytes: "SQLite format 3\000"
+        buffer = Buffer.alloc(16);
+        buffer.write('SQLite format 3\000', 0, 16, 'ascii');
       }
       
-      database = new sql.Database(buffer);
+      // Fixed: Use SQL.Database (capital S) instead of sql.Database
+      database = new SQL.Database(buffer);
       
       // Initialize all tables immediately
       database.exec(`
@@ -163,7 +167,7 @@ function initDatabase() {
 // Helper to run SQL statements
 function run(sql, params = []) {
   return new Promise((resolve, reject) => {
-    database.exec(sql, function(err) {
+    database.run(sql, params, function(err) {
       if (err) reject(err);
       else resolve(this);
     });
