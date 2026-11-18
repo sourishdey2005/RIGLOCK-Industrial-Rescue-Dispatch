@@ -38,49 +38,47 @@ const STORAGE_KEYS = {
   nodes: 'riglock_nodes_v1',
 };
 
-function readStorage<T>(key: string, fallback: T): T {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+// ===== HARDCODED CONFIGURATION (no .env needed) =====
+// All values hardcoded directly in code - no environment variables required
+
+// Clerk Configuration - Hardcoded
+const HARDCODED_CLERK_PUBLISHABLE_KEY = 'pk_test_c2FmZS1mYWxjb24tNDExNC5jbGVyay5hY2NvdW50cy5kZXYk';
+// Note: CLERK_SECRET_KEY is server-side only, we handle it differently
+
+// Convex Configuration - Hardcoded  
+const HARDCODED_CONVEX_URL = 'https://woozy-sandpiper-867.convex.cloud';
+// Using production Convex URL directly - no environment variables
+
+// API Base URL - Hardcoded
+const HARDCODED_API_BASE_URL = 'https://woozy-sandpiper-867.convex.cloud';
+
+// ===== App State =====
+let storedUser = localStorage.getItem('riglock_user');
+storedUser = storedUser ? JSON.parse(storedUser) : null;
+
+function setStoredUser(user: any) {
+  storedUser = user;
+  localStorage.setItem('riglock_user', JSON.stringify(user));
 }
-
-function writeStorage<T>(key: string, value: T) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Ignore storage errors
-  }
-}
-
-// Minimal auth state - use localStorage only (no Clerk/Convex for now)
-let storedUser = readStorage('user', null);
-
-function getUser() {
-  return storedUser;
-}
-
-setTimeout(() => {
-  // Simulate loading user from storage after short delay
-}, 100);
 
 // ===== Main App Component =====
 export default function App() {
-  const [user, setUser] = useState(getUser());
+  const [user, setUser] = useState<any>(storedUser);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    setIsLoaded(true);
-  }, 100);
+    // Simulate app loading - set loaded after 500ms
+    const timer = setTimeout(() => {
+      setIsLoaded(true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // If user is signed in, show the dashboard
-  if (user) {
+  if (user && isLoaded) {
     return (
       <>
-        <TopBar />
+        <TopBar user={user} setUser={setUser} />
         <ActiveDispatchScreen />
         <BuyerScreen />
         <DepotNodesScreen />
@@ -91,11 +89,11 @@ export default function App() {
     );
   }
 
-  // Show auth screens if not loaded yet or no user
+  // Show auth/sign-in screen if not loaded or no user
   if (!isLoaded || !user) {
     return (
       <>
-        <TopBar />
+        <TopBar user={null} setUser={setUser} />
         <RegisterScreen />
         <BuyerLoginScreen />
         <SellerLoginScreen />
@@ -103,25 +101,24 @@ export default function App() {
     );
   }
 
-  return <div>Loading...</div>;
+  return <div style={{ padding: '20px' }}>RIGLOCK Industrial Rescue Dispatch</div>;
 }
 
-// ===== TopBar with Simple Auth =====
-function TopBar() {
-  const [user, setUser] = useState(getUser());
-
+// ===== TopBar Component =====
+function TopBar({ user, setUser }: { user: any; setUser: any }) {
   return (
-    <header>
+    <header style={{ padding: '10px 20px', background: '#f5f5f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       {user ? (
         <>
-          <span>Welcome, {user.fullName}</span>
-          <a href="/">Dashboard</a>
-          <button onClick={() => setUser(null)}>Sign Out</button>
+          <span>Welcome, {user.fullName || 'User'}</span>
+          <span>({user.email || ''})</span>
+          <a href="/" style={{ marginLeft: '15px' }}>Dashboard</a>
+          <button onClick={() => setUser(null)} style={{ padding: '5px 10px' }}>Sign Out</button>
         </>
       ) : (
         <>
-          <button onClick={() => setUser({ fullName: 'Buyer', email: 'test@test.com' })}>Sign In as Buyer</button>
-          <button onClick={() => setUser({ fullName: 'Seller', email: 'test@test.com' })}>Sign In as Seller</button>
+          <button onClick={() => setUser({ fullName: 'Buyer Tester', email: 'buyer@test.com' })} style={{ padding: '5px 10px' }}>Sign In as Buyer</button>
+          <button onClick={() => setUser({ fullName: 'Seller Tester', email: 'seller@test.com' })} style={{ padding: '5px 10px' }}>Sign In as Seller</button>
         </>
       )}
     </header>
