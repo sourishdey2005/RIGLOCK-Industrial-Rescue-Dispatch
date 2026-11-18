@@ -24,6 +24,16 @@ export type ScreenTab =
   | 'nodes'
   | 'ledger';
 
+export type BuyerTab = 'products' | 'current' | 'past';
+
+export type SellerTab =
+  | 'inventory'
+  | 'orders'
+  | 'past_sales'
+  | 'cancellations'
+  | 'metrics'
+  | 'create';
+
 export type DispatchMode = 'emergency' | 'rental';
 
 export type EquipmentCategory =

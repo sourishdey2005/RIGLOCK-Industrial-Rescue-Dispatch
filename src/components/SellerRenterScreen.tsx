@@ -1,5 +1,5 @@
-import {Check, Edit3, PlusSquare, Trash2, Truck, XCircle} from 'lucide-react';
-import {FormEvent, useMemo, useState} from 'react';
+import {Check, Edit3, PlusSquare, Search, Trash2, Truck, X, XCircle} from 'lucide-react';
+import {FormEvent, useEffect, useMemo, useState} from 'react';
 import {
   AuthAccount,
   AvailabilityFlag,
@@ -9,6 +9,7 @@ import {
   DispatchMission,
   EquipmentCategory,
   EquipmentItem,
+  SellerTab,
 } from '../types/rescue';
 import {formatRs} from '../utils/currency';
 import {PerformanceMetrics} from './PerformanceMetrics';
@@ -34,15 +35,10 @@ interface SellerRenterScreenProps {
   onAdvanceOrderStatus: (orderId: string, nextStatus: BuyerOrderStatus) => void;
   onCancelOrder: (orderId: string, reason: string) => void;
   onOpenMission: (missionId: string) => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  requestedTab?: {tab: SellerTab; seq: number} | null;
 }
-
-type SellerTab =
-  | 'inventory'
-  | 'orders'
-  | 'past_sales'
-  | 'cancellations'
-  | 'metrics'
-  | 'create';
 
 const CATEGORY_IMAGES: Record<Exclude<EquipmentCategory, 'ALL'>, string> = {
   POWER: '/src/assets/images/equip_diesel_generator_1794980503104.jpg',
@@ -73,8 +69,21 @@ export function SellerRenterScreen({
   onAdvanceOrderStatus,
   onCancelOrder,
   onOpenMission,
+  searchQuery: externalSearchQuery,
+  onSearchChange,
+  requestedTab,
 }: SellerRenterScreenProps) {
   const [activeTab, setActiveTab] = useState<SellerTab>('inventory');
+  const [localSearch, setLocalSearch] = useState('');
+  const searchQuery = externalSearchQuery ?? localSearch;
+  const setSearchQuery = onSearchChange ?? setLocalSearch;
+
+  useEffect(() => {
+    if (requestedTab) {
+      setActiveTab(requestedTab.tab);
+    }
+  }, [requestedTab]);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPurchase, setEditPurchase] = useState('');
   const [editDaily, setEditDaily] = useState('');
@@ -159,6 +168,59 @@ export function SellerRenterScreen({
   const cancelledMissions = useMemo(
     () => myMissions.filter((m) => m.status === 'ABORTED'),
     [myMissions],
+  );
+
+  const qLower = searchQuery.trim().toLowerCase();
+
+  const matchesItem = (item: EquipmentItem) => {
+    if (!qLower) return true;
+    return `${item.sku} ${item.name} ${item.category} ${item.nodeCallsign} ${item.availabilityFlag} ${item.primaryOutput} ${item.conditionRating}`
+      .toLowerCase()
+      .includes(qLower);
+  };
+
+  const matchesOrder = (order: BuyerOrder) => {
+    if (!qLower) return true;
+    const itemText = order.items.map((i) => `${i.sku} ${i.name}`).join(' ');
+    return `${order.poNumber} ${order.buyerCompany} ${order.status} ${order.deliveryAddress} ${order.contactName ?? ''} ${order.cancellationReason ?? ''} ${itemText}`
+      .toLowerCase()
+      .includes(qLower);
+  };
+
+  const matchesMission = (m: DispatchMission) => {
+    if (!qLower) return true;
+    return `${m.missionCode} ${m.buyerName} ${m.status} ${m.dropZoneAddress} ${m.equipment.sku} ${m.equipment.name} ${m.equipment.nodeCallsign}`
+      .toLowerCase()
+      .includes(qLower);
+  };
+
+  const filteredInventory = useMemo(
+    () => myInventory.filter(matchesItem),
+    [myInventory, qLower],
+  );
+  const filteredCurrentOrders = useMemo(
+    () => currentOrders.filter(matchesOrder),
+    [currentOrders, qLower],
+  );
+  const filteredActiveMissions = useMemo(
+    () => activeMissions.filter(matchesMission),
+    [activeMissions, qLower],
+  );
+  const filteredPastSaleOrders = useMemo(
+    () => pastSaleOrders.filter(matchesOrder),
+    [pastSaleOrders, qLower],
+  );
+  const filteredPastSaleMissions = useMemo(
+    () => pastSaleMissions.filter(matchesMission),
+    [pastSaleMissions, qLower],
+  );
+  const filteredCancelledOrders = useMemo(
+    () => cancelledOrders.filter(matchesOrder),
+    [cancelledOrders, qLower],
+  );
+  const filteredCancelledMissions = useMemo(
+    () => cancelledMissions.filter(matchesMission),
+    [cancelledMissions, qLower],
   );
 
   const netSettledRevenue = useMemo(() => {
@@ -401,6 +463,44 @@ export function SellerRenterScreen({
         )}
       </div>
 
+      {/* Synced Inventory & Orders Filter Strip */}
+      {(activeTab === 'inventory' ||
+        activeTab === 'orders' ||
+        activeTab === 'past_sales' ||
+        activeTab === 'cancellations') && (
+        <div className="bg-[#1A1A1A] border-2 border-[#2A2A2A] p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search
+              aria-hidden="true"
+              className="w-4 h-4 text-[#8E8D88] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="FILTER YOUR INVENTORY BY SKU / NODE OR ORDERS BY PO# / BUYER..."
+              aria-label="Filter seller inventory and orders"
+              className="input-tactical w-full h-10 pl-9 pr-9 font-mono-tabular text-xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear seller search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8E8D88] hover:text-[#FF2E2E] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {qLower && (
+            <div className="font-mono-tabular text-[11px] text-[#C6FF3D] uppercase shrink-0">
+              ACTIVE FILTER: &quot;{searchQuery.trim()}&quot;
+            </div>
+          )}
+        </div>
+      )}
+
       {/* TAB 4.5: PERFORMANCE METRICS (D3 ANALYTICS) */}
       {activeTab === 'metrics' && (
         <PerformanceMetrics
@@ -414,18 +514,30 @@ export function SellerRenterScreen({
       {/* TAB 1: SELLER'S OWN INVENTORY */}
       {activeTab === 'inventory' && (
         <div className="bg-[#1A1A1A] border-2 border-[#2A2A2A] shadow-hard overflow-x-auto">
-          {myInventory.length === 0 ? (
+          {filteredInventory.length === 0 ? (
             <div className="p-10 text-center space-y-4 font-mono-tabular">
               <div className="text-xs text-[#8E8D88]">
-                NO HARDWARE UNITS LISTED UNDER {currentUser.companyName} YET.
+                {myInventory.length === 0
+                  ? `NO HARDWARE UNITS LISTED UNDER ${currentUser.companyName} YET.`
+                  : 'NO INVENTORY UNITS MATCH YOUR CURRENT SEARCH FILTER.'}
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('create')}
-                className="btn-dispatch chamfer-tag px-5 py-2.5 text-xs font-bold uppercase cursor-pointer"
-              >
-                LIST YOUR FIRST HARDWARE UNIT
-              </button>
+              {myInventory.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('create')}
+                  className="btn-dispatch chamfer-tag px-5 py-2.5 text-xs font-bold uppercase cursor-pointer"
+                >
+                  LIST YOUR FIRST HARDWARE UNIT
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="btn-secondary-mech px-5 py-2.5 text-xs font-bold uppercase cursor-pointer"
+                >
+                  CLEAR SEARCH FILTER
+                </button>
+              )}
             </div>
           ) : (
           <table className="w-full text-left border-collapse font-mono-tabular text-xs">
@@ -441,7 +553,7 @@ export function SellerRenterScreen({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2A2A2A]">
-              {myInventory.map((item) => {
+              {filteredInventory.map((item) => {
                 const isEditing = editingId === item.id;
                 const isInVehicle = item.availabilityFlag === 'IN VEHICLE';
 
@@ -603,17 +715,19 @@ export function SellerRenterScreen({
                 ACTIVE INCOMING PURCHASE ORDERS (YOUR HARDWARE ONLY)
               </span>
               <span className="text-[#FF5A1F]">
-                {currentOrders.length} OPEN
+                {filteredCurrentOrders.length} OPEN
               </span>
             </div>
 
-            {currentOrders.length === 0 ? (
+            {filteredCurrentOrders.length === 0 ? (
               <div className="p-8 text-center font-mono-tabular text-xs text-[#8E8D88]">
-                NO ACTIVE PURCHASE ORDERS PENDING FULFILLMENT FOR YOUR INVENTORY.
+                {currentOrders.length === 0
+                  ? 'NO ACTIVE PURCHASE ORDERS PENDING FULFILLMENT FOR YOUR INVENTORY.'
+                  : 'NO ACTIVE PURCHASE ORDERS MATCH YOUR SEARCH QUERY.'}
               </div>
             ) : (
               <div className="divide-y-2 divide-[#2A2A2A]">
-                {currentOrders.map((order) => {
+                {filteredCurrentOrders.map((order) => {
                   const sellerItems = order.items.filter(
                     (i) => i.sellerId === currentUser.id,
                   );
@@ -774,12 +888,16 @@ export function SellerRenterScreen({
                 <Truck className="w-4 h-4 text-[#C6FF3D]" />
                 ACTIVE RENTALS & ER DISPATCHES (YOUR FLEET)
               </span>
-              <span className="text-[#C6FF3D]">{activeMissions.length} LIVE</span>
+              <span className="text-[#C6FF3D]">
+                {filteredActiveMissions.length} LIVE
+              </span>
             </div>
 
-            {activeMissions.length === 0 ? (
+            {filteredActiveMissions.length === 0 ? (
               <div className="p-6 text-center font-mono-tabular text-xs text-[#8E8D88]">
-                NO ACTIVE RENTALS CURRENTLY DISPATCHED FROM YOUR NODES.
+                {activeMissions.length === 0
+                  ? 'NO ACTIVE RENTALS CURRENTLY DISPATCHED FROM YOUR NODES.'
+                  : 'NO ACTIVE RENTALS MATCH YOUR SEARCH QUERY.'}
               </div>
             ) : (
               <table className="w-full text-left border-collapse font-mono-tabular text-xs">
@@ -794,7 +912,7 @@ export function SellerRenterScreen({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2A2A2A]">
-                  {activeMissions.map((m) => (
+                  {filteredActiveMissions.map((m) => (
                     <tr key={m.id}>
                       <td className="py-3 px-4 font-bold text-[#F4F1EA]">
                         {m.missionCode}
@@ -836,13 +954,15 @@ export function SellerRenterScreen({
                 SETTLED PAST HARDWARE SALES
               </span>
               <span className="text-[#C6FF3D]">
-                {pastSaleOrders.length} COMPLETED
+                {filteredPastSaleOrders.length} COMPLETED
               </span>
             </div>
 
-            {pastSaleOrders.length === 0 ? (
+            {filteredPastSaleOrders.length === 0 ? (
               <div className="p-8 text-center font-mono-tabular text-xs text-[#8E8D88]">
-                NO COMPLETED HARDWARE SALES RECORDED YET.
+                {pastSaleOrders.length === 0
+                  ? 'NO COMPLETED HARDWARE SALES RECORDED YET.'
+                  : 'NO PAST SALES MATCH YOUR SEARCH QUERY.'}
               </div>
             ) : (
               <table className="w-full text-left border-collapse font-mono-tabular text-xs">
@@ -857,7 +977,7 @@ export function SellerRenterScreen({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2A2A2A]">
-                  {pastSaleOrders.map((order) => {
+                  {filteredPastSaleOrders.map((order) => {
                     const sellerItems = order.items.filter(
                       (i) => i.sellerId === currentUser.id,
                     );
@@ -905,12 +1025,14 @@ export function SellerRenterScreen({
                 COMPLETED RENTAL & ER PAYOUTS
               </span>
               <span className="text-[#8E8D88]">
-                {pastSaleMissions.length} MISSIONS
+                {filteredPastSaleMissions.length} MISSIONS
               </span>
             </div>
-            {pastSaleMissions.length === 0 ? (
+            {filteredPastSaleMissions.length === 0 ? (
               <div className="p-6 text-center font-mono-tabular text-xs text-[#8E8D88]">
-                NO COMPLETED RENTAL MISSIONS YET.
+                {pastSaleMissions.length === 0
+                  ? 'NO COMPLETED RENTAL MISSIONS YET.'
+                  : 'NO COMPLETED RENTALS MATCH YOUR SEARCH QUERY.'}
               </div>
             ) : (
               <table className="w-full text-left border-collapse font-mono-tabular text-xs">
@@ -923,7 +1045,7 @@ export function SellerRenterScreen({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2A2A2A]">
-                  {pastSaleMissions.map((m) => (
+                  {filteredPastSaleMissions.map((m) => (
                     <tr key={m.id}>
                       <td className="py-3 px-4 font-bold text-[#F4F1EA]">
                         {m.missionCode}
@@ -953,13 +1075,15 @@ export function SellerRenterScreen({
                 CANCELLED BUYER ORDERS (YOUR INVENTORY)
               </span>
               <span className="text-[#FF2E2E]">
-                {cancelledOrders.length} CANCELLED POs
+                {filteredCancelledOrders.length} CANCELLED POs
               </span>
             </div>
 
-            {cancelledOrders.length === 0 ? (
+            {filteredCancelledOrders.length === 0 ? (
               <div className="p-8 text-center font-mono-tabular text-xs text-[#8E8D88]">
-                ZERO ORDER CANCELLATIONS RECORDED FOR YOUR ACCOUNT.
+                {cancelledOrders.length === 0
+                  ? 'ZERO ORDER CANCELLATIONS RECORDED FOR YOUR ACCOUNT.'
+                  : 'NO CANCELLED ORDERS MATCH YOUR SEARCH QUERY.'}
               </div>
             ) : (
               <table className="w-full text-left border-collapse font-mono-tabular text-xs">
@@ -974,7 +1098,7 @@ export function SellerRenterScreen({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2A2A2A]">
-                  {cancelledOrders.map((order) => {
+                  {filteredCancelledOrders.map((order) => {
                     const sellerItems = order.items.filter(
                       (i) => i.sellerId === currentUser.id,
                     );
@@ -1022,13 +1146,15 @@ export function SellerRenterScreen({
                 ABORTED RENTAL & EMERGENCY DISPATCHES
               </span>
               <span className="text-[#FF2E2E]">
-                {cancelledMissions.length} ABORTED
+                {filteredCancelledMissions.length} ABORTED
               </span>
             </div>
 
-            {cancelledMissions.length === 0 ? (
+            {filteredCancelledMissions.length === 0 ? (
               <div className="p-6 text-center font-mono-tabular text-xs text-[#8E8D88]">
-                NO ABORTED RENTALS RECORDED.
+                {cancelledMissions.length === 0
+                  ? 'NO ABORTED RENTALS RECORDED.'
+                  : 'NO ABORTED RENTALS MATCH YOUR SEARCH QUERY.'}
               </div>
             ) : (
               <table className="w-full text-left border-collapse font-mono-tabular text-xs">
@@ -1042,7 +1168,7 @@ export function SellerRenterScreen({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2A2A2A]">
-                  {cancelledMissions.map((m) => (
+                  {filteredCancelledMissions.map((m) => (
                     <tr key={m.id}>
                       <td className="py-3 px-4 font-bold text-[#F4F1EA]">
                         {m.missionCode}

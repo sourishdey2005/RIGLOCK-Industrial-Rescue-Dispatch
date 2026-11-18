@@ -18,6 +18,7 @@ import {
   AuthAccount,
   BuyerOrder,
   BuyerOrderItem,
+  BuyerTab,
   DispatchMission,
   EquipmentCategory,
   EquipmentItem,
@@ -37,9 +38,10 @@ interface BuyerScreenProps {
   onCancelOrder: (orderId: string, reason: string) => void;
   onRentUnit: (item: EquipmentItem) => void;
   onOpenMission: (missionId: string) => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  requestedTab?: {tab: BuyerTab; seq: number} | null;
 }
-
-type BuyerTab = 'products' | 'current' | 'past';
 
 const CATEGORIES: EquipmentCategory[] = [
   'ALL',
@@ -77,6 +79,9 @@ export function BuyerScreen({
   onCancelOrder,
   onRentUnit,
   onOpenMission,
+  searchQuery: externalSearchQuery,
+  onSearchChange,
+  requestedTab,
 }: BuyerScreenProps) {
   const [activeTab, setActiveTab] = useState<BuyerTab>('products');
   const [category, setCategory] = useState<EquipmentCategory>('ALL');
@@ -86,7 +91,15 @@ export function BuyerScreen({
   const [sortBy, setSortBy] = useState<
     'nearest' | 'price_asc' | 'price_desc' | 'stock'
   >('nearest');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
+  const searchQuery = externalSearchQuery ?? localSearch;
+  const setSearchQuery = onSearchChange ?? setLocalSearch;
+
+  useEffect(() => {
+    if (requestedTab) {
+      setActiveTab(requestedTab.tab);
+    }
+  }, [requestedTab]);
   const [cart, setCart] = useState<BuyerOrderItem[]>([]);
   const [deliveryTier, setDeliveryTier] =
     useState<BuyerOrder['deliveryTier']>('FREIGHT');
@@ -197,7 +210,7 @@ export function BuyerScreen({
         return false;
       }
       if (!q) return true;
-      return `${item.sku} ${item.name} ${item.sellerName} ${item.primaryOutput} ${item.voltageOrPressure} ${item.summary}`
+      return `${item.sku} ${item.name} ${item.category} ${item.nodeCallsign} ${item.nodeId} ${item.sellerName} ${item.primaryOutput} ${item.voltageOrPressure} ${item.summary}`
         .toLowerCase()
         .includes(q);
     });
@@ -474,7 +487,7 @@ export function BuyerScreen({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="SEARCH BY SKU, MODEL, KVA, GPM, OR SPEC..."
+                    placeholder="SEARCH BY SKU, CATEGORY, NODE, OR MODEL..."
                     aria-label="Search buyer product catalog"
                     className="input-tactical w-full h-11 pl-10 pr-4 font-mono-tabular text-xs"
                   />

@@ -15,6 +15,8 @@ interface TriageBoardScreenProps {
   onSelectEquipment: (item: EquipmentItem) => void;
   nodeFilter: string | null;
   onClearNodeFilter: () => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 const CATEGORIES: {id: EquipmentCategory; label: string}[] = [
@@ -36,9 +38,13 @@ export function TriageBoardScreen({
   onSelectEquipment,
   nodeFilter,
   onClearNodeFilter,
+  searchQuery: externalSearchQuery,
+  onSearchChange,
 }: TriageBoardScreenProps) {
   const [category, setCategory] = useState<EquipmentCategory>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
+  const searchQuery = externalSearchQuery ?? localSearch;
+  const setSearchQuery = onSearchChange ?? setLocalSearch;
   const [radiusMiles, setRadiusMiles] = useState<(typeof RADII)[number]>(15);
   const [onlyInVehicle, setOnlyInVehicle] = useState(false);
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
@@ -51,7 +57,7 @@ export function TriageBoardScreen({
       if (item.distanceMiles > radiusMiles) return false;
       if (onlyInVehicle && item.availabilityFlag !== 'IN VEHICLE') return false;
       if (q) {
-        const hay = `${item.sku} ${item.name} ${item.category} ${item.primaryOutput} ${item.voltageOrPressure} ${item.summary}`.toLowerCase();
+        const hay = `${item.sku} ${item.name} ${item.category} ${item.nodeCallsign} ${item.nodeId} ${item.sellerName} ${item.primaryOutput} ${item.voltageOrPressure} ${item.summary}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;

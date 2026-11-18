@@ -22,12 +22,14 @@ import {
   AuthView,
   BuyerOrder,
   BuyerOrderStatus,
+  BuyerTab,
   DepotNode,
   DispatchMission,
   DispatchMode,
   EquipmentItem,
   MissionStatus,
   ScreenTab,
+  SellerTab,
   UserRole,
 } from './types/rescue';
 
@@ -97,6 +99,15 @@ export default function App() {
   const [stagingEquipment, setStagingEquipment] =
     useState<EquipmentItem | null>(null);
   const [nodeFilter, setNodeFilter] = useState<string | null>(null);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [buyerTabIntent, setBuyerTabIntent] = useState<{
+    tab: BuyerTab;
+    seq: number;
+  } | null>(null);
+  const [sellerTabIntent, setSellerTabIntent] = useState<{
+    tab: SellerTab;
+    seq: number;
+  } | null>(null);
   const [activeMissionId, setActiveMissionId] = useState<string>(
     INITIAL_MISSION_LEDGER[0].id,
   );
@@ -277,6 +288,7 @@ export default function App() {
     setCurrentUser(found);
     setStagingEquipment(null);
     setNodeFilter(null);
+    setGlobalSearchQuery('');
     setActiveScreen(found.role === 'buyer' ? 'buyer' : 'seller');
     return null;
   };
@@ -286,6 +298,7 @@ export default function App() {
     setCurrentUser(null);
     setStagingEquipment(null);
     setNodeFilter(null);
+    setGlobalSearchQuery('');
     setAuthNotice('SIGNED OUT SAFELY. AUTHENTICATE WITH YOUR ROLE PORTAL.');
     setAuthView(prevRole === 'seller' ? 'seller-login' : 'buyer-login');
   };
@@ -721,6 +734,51 @@ export default function App() {
         authView={authView}
         onAuthNavigate={setAuthView}
         onSignOut={handleSignOut}
+        globalSearch={globalSearchQuery}
+        onGlobalSearchChange={setGlobalSearchQuery}
+        catalog={role === 'buyer' ? catalog : undefined}
+        sellerInventory={role === 'seller' ? mySellerInventory : undefined}
+        sellerOrders={role === 'seller' ? mySellerOrders : undefined}
+        sellerMissions={role === 'seller' ? mySellerMissions : undefined}
+        onSelectBuyerResult={(item) => {
+          setGlobalSearchQuery(item.sku);
+          setActiveScreen('buyer');
+          setBuyerTabIntent({tab: 'products', seq: Date.now()});
+        }}
+        onViewBuyerCatalog={(target) => {
+          setActiveScreen(target);
+          if (target === 'buyer') {
+            setBuyerTabIntent({tab: 'products', seq: Date.now()});
+          }
+        }}
+        onSelectSellerInventory={(item) => {
+          setGlobalSearchQuery(item.sku);
+          setActiveScreen('seller');
+          setSellerTabIntent({tab: 'inventory', seq: Date.now()});
+        }}
+        onSelectSellerOrder={(order) => {
+          const tab: SellerTab =
+            order.status === 'DELIVERED'
+              ? 'past_sales'
+              : order.status === 'CANCELLED_BY_BUYER' ||
+                  order.status === 'CANCELLED_BY_SELLER'
+                ? 'cancellations'
+                : 'orders';
+          setGlobalSearchQuery(order.poNumber);
+          setActiveScreen('seller');
+          setSellerTabIntent({tab, seq: Date.now()});
+        }}
+        onSelectSellerMission={(mission) => {
+          const tab: SellerTab =
+            mission.status === 'COMPLETED'
+              ? 'past_sales'
+              : mission.status === 'ABORTED'
+                ? 'cancellations'
+                : 'orders';
+          setGlobalSearchQuery(mission.missionCode);
+          setActiveScreen('seller');
+          setSellerTabIntent({tab, seq: Date.now()});
+        }}
       />
 
       {/* Authenticated Account Context Strip (Strictly Role-Locked) */}
@@ -761,6 +819,8 @@ export default function App() {
             onSelectEquipment={(item) => setStagingEquipment(item)}
             nodeFilter={nodeFilter}
             onClearNodeFilter={() => setNodeFilter(null)}
+            searchQuery={globalSearchQuery}
+            onSearchChange={setGlobalSearchQuery}
           />
         )}
 
@@ -779,6 +839,9 @@ export default function App() {
               setActiveMissionId(missionId);
               setActiveScreen('dispatch');
             }}
+            searchQuery={globalSearchQuery}
+            onSearchChange={setGlobalSearchQuery}
+            requestedTab={buyerTabIntent}
           />
         )}
 
@@ -814,6 +877,9 @@ export default function App() {
               setActiveMissionId(missionId);
               setActiveScreen('dispatch');
             }}
+            searchQuery={globalSearchQuery}
+            onSearchChange={setGlobalSearchQuery}
+            requestedTab={sellerTabIntent}
           />
         )}
 
