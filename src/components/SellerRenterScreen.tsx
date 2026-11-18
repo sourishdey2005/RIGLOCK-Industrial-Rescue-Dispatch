@@ -1,4 +1,4 @@
-import {Check, Edit3, PlusSquare, Search, Trash2, Truck, X, XCircle} from 'lucide-react';
+import {Check, Edit3, FileText, PlusSquare, Search, Trash2, Truck, X, XCircle} from 'lucide-react';
 import {FormEvent, useEffect, useMemo, useState} from 'react';
 import {
   AuthAccount,
@@ -118,6 +118,10 @@ export function SellerRenterScreen({
     myNodes[0]?.id || 'node-van-04',
   );
   const [newSummary, setNewSummary] = useState('');
+  const [newImage, setNewImage] = useState<File | null>(null);
+  const [newImagePreview, setNewImagePreview] = useState<string | null>(
+    null,
+  );
   const [formError, setFormError] = useState<string | null>(null);
 
   // Compute seller-only slice of an order's line items
@@ -257,9 +261,9 @@ export function SellerRenterScreen({
 
   const handleCreateUnit = (e: FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newSku.trim() || !newOutput.trim()) {
+    if (!newName.trim() || !newSku.trim() || !newOutput.trim() || !newImage) {
       setFormError(
-        'EQUIPMENT NAME, SKU, AND OUTPUT RATING ARE REQUIRED TO PUBLISH.',
+        'EQUIPMENT NAME, SKU, OUTPUT RATING, AND PRODUCT IMAGE ARE REQUIRED TO PUBLISH.',
       );
       return;
     }
@@ -271,12 +275,13 @@ export function SellerRenterScreen({
     const depositAmount = Math.max(5000, Number(newDeposit) || 25000);
     const stockQty = Math.max(1, Math.floor(Number(newStock) || 1));
 
+    const createdImage = newImagePreview || CATEGORY_IMAGES[newCategory];
     const created: EquipmentItem = {
       id: `eq-vendor-${Date.now()}`,
       sku: newSku.trim().toUpperCase(),
       name: newName.trim().toUpperCase(),
       category: newCategory,
-      image: CATEGORY_IMAGES[newCategory],
+      image: createdImage,
       conditionRating: newCondition,
       availabilityFlag: newAvailability,
       emergencyHourlyRate,
@@ -1461,6 +1466,75 @@ export function SellerRenterScreen({
                 placeholder="CABLES, HOSES, FUEL STATUS, AND RIGGING NOTES..."
                 className="input-tactical w-full h-11 px-3 text-xs"
               />
+            </div>
+
+            <div>
+              <label
+                htmlFor="new-equip-image"
+                className="block text-[11px] uppercase text-[#8E8D88] mb-1.5"
+              >
+                PRODUCT IMAGE
+              </label>
+              <input
+                id="new-equip-image"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setNewImage(file);
+                    const reader = new FileReader();
+                    reader.onload = (e) => setNewImagePreview(e.target?.result as string);
+                    reader.readAsDataURL(file);
+                  } else {
+                    setNewImagePreview(null);
+                  }
+                }}
+                className="input-tactical w-full h-11 px-3 text-xs"
+                style={{ display: 'none' }}
+              />
+              <div
+                onClick={() => document.getElementById('new-equip-image')?.click()}
+                className="relative inline-flex items-center justify-center w-full h-11 px-3 py-2 border-2 border-dashed border-[#2A2A2A] cursor-pointer hover:border-[#C6FF3D] transition-colors"
+              >
+                {newImagePreview ? (
+                  <img
+                    src={newImagePreview}
+                    alt="Product preview"
+                    className="w-8 h-8 object-cover rounded mr-2"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded border border-[#2A2A2A] flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-[#8E8D88]"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 5H5m4 0h6m-6 4h6" />
+                    </svg>
+                  </div>
+                )}
+                <span className="absolute right-1 top-1 text-xs text-[#8E8D88]">
+                  Browse
+                  <input
+                    id="new-equip-image-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setNewImage(file);
+                        const reader = new FileReader();
+                        reader.onload = (e) => setNewImagePreview(e.target?.result as string);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                </span>
+              </div>
             </div>
           </div>
 
