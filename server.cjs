@@ -1,10 +1,5 @@
-// RIGLOCK Backend Server - sql.js + Express
-// Pure JavaScript SQLite - no native binding GLIBC issues
-// Free hosting: Render.com (free tier) or any Node.js host
-// Frontend: Vercel (https://riglock-industrysite.vercel.app/)
-
 const express = require('express');
-const SQL = require('sql.js');  // Fixed: use SQL (capital S)
+const SQL = require('sql.js');
 const path = require('path');
 const cors = require('cors');
 require('dotenv').config();
@@ -13,8 +8,8 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Middleware - CORS configured for Vercel frontend
-const allowedOrigins = process.env.CORS_ORIGIN 
-  ? [process.env.CORS_ORIGIN] 
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? [process.env.CORS_ORIGIN]
   : ['https://riglock-industrysite.vercel.app', 'http://localhost:3000'];
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
@@ -24,31 +19,26 @@ app.use(express.static('public'));
 const dbPath = path.resolve(__dirname, 'riglock.db');
 
 // Initialize sql.js database
-// sql.js requires loading the database from an ArrayBuffer
+// sql.js Database constructor creates an empty database when called without arguments
 let database = null;
 
 function initDatabase() {
   return new Promise((resolve, reject) => {
     const fs = require('fs');
-    let buffer = null;
-    
+
     try {
       // Try to read existing database file
       if (fs.existsSync(dbPath)) {
-        buffer = fs.readFileSync(dbPath);
+        const buffer = fs.readFileSync(dbPath);
         console.log('Found existing riglock.db, loading...');
+        database = new SQL.Database(buffer);
       } else {
         console.log('No existing riglock.db, creating new...');
-        // sql.js requires a valid ArrayBuffer - create proper header
-        // sql.js database header is 16 bytes: "SQLite format 3\000"
-        buffer = Buffer.alloc(16);
-        buffer.write('SQLite format 3\000', 0, 16, 'ascii');
+        // Create new empty database - no buffer needed, sql.js handles it
+        database = new SQL.Database();
       }
-      
-      // Fixed: Use SQL.Database (capital S) instead of sql.Database
-      database = new SQL.Database(buffer);
-      
-      // Initialize all tables immediately
+
+      // Initialize all tables immediately using exec
       database.exec(`
         CREATE TABLE IF NOT EXISTS accounts (
           id TEXT PRIMARY KEY,
@@ -62,7 +52,7 @@ function initDatabase() {
           depot_region TEXT,
           created_at TEXT DEFAULT (datetime('now'))
         );
-        
+
         CREATE TABLE IF NOT EXISTS equipment (
           id TEXT PRIMARY KEY,
           sku TEXT UNIQUE NOT NULL,
@@ -98,7 +88,7 @@ function initDatabase() {
           checklist TEXT DEFAULT '[]',
           created_at TEXT DEFAULT (datetime('now'))
         );
-        
+
         CREATE TABLE IF NOT EXISTS orders (
           id TEXT PRIMARY KEY,
           po_number TEXT UNIQUE NOT NULL,
@@ -117,7 +107,7 @@ function initDatabase() {
           cancelled_by TEXT CHECK (cancelled_by IN ('BUYER', 'SELLER')),
           cancellation_reason TEXT
         );
-      
+
         CREATE TABLE IF NOT EXISTS order_items (
           id TEXT PRIMARY KEY,
           order_id TEXT,
@@ -131,7 +121,7 @@ function initDatabase() {
           total_price REAL DEFAULT 0,
           created_at TEXT DEFAULT (datetime('now'))
         );
-      
+
         CREATE TABLE IF NOT EXISTS missions (
           id TEXT PRIMARY KEY,
           mission_code TEXT UNIQUE NOT NULL,
@@ -156,7 +146,7 @@ function initDatabase() {
           created_at TEXT DEFAULT (datetime('now'))
         );
       `);
-      
+
       resolve(database);
     } catch (err) {
       reject(err);
@@ -164,7 +154,7 @@ function initDatabase() {
   });
 }
 
-// Helper to run SQL statements
+// Helper to run SQL statements with parameters
 function run(sql, params = []) {
   return new Promise((resolve, reject) => {
     database.run(sql, params, function(err) {
@@ -179,7 +169,7 @@ function run(sql, params = []) {
 app.post('/api/register', async (req, res) => {
   const { role, fullName, companyName, email, password, phone, gstin, siteOrDepotAddress, depotRegion } = req.body;
   const id = `user-${Date.now()}`;
-  
+
   try {
     // Check if email already exists
     const existing = await new Promise((resolve, reject) => {
@@ -188,11 +178,11 @@ app.post('/api/register', async (req, res) => {
         else resolve(rows.length > 0);
       });
     });
-    
+
     if (existing) {
       return res.status(409).json({ success: false, error: 'Email already registered' });
     }
-    
+
     await run(
       `INSERT INTO accounts (id, role, full_name, company_name, email, phone, gstin, site_or_depot_address, depot_region, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, role, fullName, companyName, email, phone, gstin, siteOrDepotAddress, depotRegion]
@@ -211,7 +201,7 @@ app.post('/api/login', async (req, res) => {
       else resolve(rows);
     });
   });
-  
+
   if (accounts.length === 0 || accounts[0].password !== password) {
     return res.status(401).json({ success: false, error: 'Invalid credentials' });
   }
@@ -252,14 +242,14 @@ app.get('/api/seller/equipment', async (req, res) => {
 app.post('/api/equipment', async (req, res) => {
   const item = req.body;
   const id = `eq-${Date.now()}`;
-  
+
   try {
     await run(
-      `INSERT INTO equipment (id, sku, name, category, image_url, condition_rating, availability_flag, 
-       emergency_hourly_rate, emergency_dispatch_fee, rental_daily_rate, rental_weekly_rate, 
-       purchase_price, stock_qty, seller_id, seller_name, deposit_amount, deposit_tier, rating, 
-       last_ping_seconds, distance_miles, eta_minutes, node_id, node_callsign, courier_name, 
-       courier_plate, weight_lbs, primary_output, voltage_or_pressure, inspection_date, summary, specs, checklist, created_at) 
+      `INSERT INTO equipment (id, sku, name, category, image_url, condition_rating, availability_flag,
+       emergency_hourly_rate, emergency_dispatch_fee, rental_daily_rate, rental_weekly_rate,
+       purchase_price, stock_qty, seller_id, seller_name, deposit_amount, deposit_tier, rating,
+       last_ping_seconds, distance_miles, eta_minutes, node_id, node_callsign, courier_name,
+       courier_plate, weight_lbs, primary_output, voltage_or_pressure, inspection_date, summary, specs, checklist, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, item.sku, item.name, item.category, item.image || '/src/assets/images/placeholder.jpg',
         item.conditionRating, item.availabilityFlag, item.emergencyHourlyRate, item.emergencyDispatchFee,
@@ -268,8 +258,7 @@ app.post('/api/equipment', async (req, res) => {
         item.rating, item.lastPingSeconds, item.distanceMiles, item.etaMinutes,
         item.nodeId, item.nodeCallsign, item.courierName, item.courierPlate,
         item.weightLbs, item.primaryOutput, item.voltageOrPressure, item.inspectionDate,
-        item.summary, JSON.stringify(item.specs || []), JSON.stringify(item.checklist || [])
-      ]
+        item.summary, JSON.stringify(item.specs || []), JSON.stringify(item.checklist || [])]
     );
     res.json({ success: true, id });
   } catch (err) {
@@ -280,7 +269,7 @@ app.post('/api/equipment', async (req, res) => {
 app.put('/api/equipment/:id', async (req, res) => {
   const { id } = req.params;
   const { purchasePrice, rentalDailyRate, emergencyHourlyRate, stockQty } = req.body;
-  
+
   try {
     await run(
       `UPDATE equipment SET purchase_price = ?, rental_daily_rate = ?, emergency_hourly_rate = ?, stock_qty = ?, updated_at = datetime('now') WHERE id = ?`,
@@ -294,7 +283,7 @@ app.put('/api/equipment/:id', async (req, res) => {
 
 app.delete('/api/equipment/:id', async (req, res) => {
   const { id } = req.params;
-  
+
   try {
     await run(`DELETE FROM equipment WHERE id = ?`, [id]);
     res.json({ success: true });
@@ -321,16 +310,17 @@ app.get('/api/buyer/orders', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   const { poNumber, buyerId, buyerCompany, gstin, deliveryAddress, deliveryTier, deliveryFee,
-          subtotal, gstAmount, grandTotal, items } = req.body;
+    subtotal, gstAmount, grandTotal, items } = req.body;
   const id = `po-${Date.now()}`;
-  
+
   try {
     await run(
-      `INSERT INTO orders (id, po_number, buyer_id, buyer_company, gstin, delivery_address, delivery_tier, 
-       delivery_fee, subtotal, gst_amount, grand_total, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', datetime('now'))`,
+      `INSERT INTO orders (id, po_number, buyer_id, buyer_company, gstin, delivery_address, delivery_tier,
+       delivery_fee, subtotal, gst_amount, grand_total, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', datetime('now'))`,
       [id, poNumber, buyerId, buyerCompany, gstin, deliveryAddress, deliveryTier, deliveryFee, subtotal, gstAmount, grandTotal]
     );
-    
+
     res.json({ success: true, orderId: id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -356,17 +346,18 @@ app.get('/api/buyer/missions', async (req, res) => {
 app.post('/api/missions', async (req, res) => {
   const mission = req.body;
   const id = `mis-${Date.now()}`;
-  
+
   try {
     await run(
-      `INSERT INTO missions (id, mission_code, buyer_id, buyer_name, equipment_id, mode, drop_zone_address, 
-       site_coordinates, priority_override, eta_total_seconds, remaining_seconds, status, handoff_pin, 
-       courier_name, courier_plate, started_at, total_cost, rental_days, cancellation_reason, logs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO missions (id, mission_code, buyer_id, buyer_name, equipment_id, mode, drop_zone_address,
+       site_coordinates, priority_override, eta_total_seconds, remaining_seconds, status, handoff_pin,
+       courier_name, courier_plate, started_at, total_cost, rental_days, cancellation_reason, logs)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, mission.missionCode, mission.buyerId, mission.buyerName, mission.equipmentId, mission.mode,
-       mission.dropZoneAddress, mission.siteCoordinates, mission.priorityOverride ? 1 : 0,
-       mission.etaTotalSeconds, mission.remainingSeconds, mission.status || 'VERIFIED', mission.handoffPin,
-       mission.courierName, mission.courierPlate, mission.startedAt || new Date().toISOString(),
-       mission.totalCost, mission.rentalDays, mission.cancellationReason, JSON.stringify(mission.logs || [])]
+        mission.dropZoneAddress, mission.siteCoordinates, mission.priorityOverride ? 1 : 0,
+        mission.etaTotalSeconds, mission.remainingSeconds, mission.status || 'VERIFIED', mission.handoffPin,
+        mission.courierName, mission.courierPlate, mission.startedAt || new Date().toISOString(),
+        mission.totalCost, mission.rentalDays, mission.cancellationReason, JSON.stringify(mission.logs || [])]
     );
     res.json({ success: true, missionId: id });
   } catch (err) {
@@ -393,10 +384,11 @@ app.get('/api/nodes', async (req, res) => {
 app.post('/api/nodes', async (req, res) => {
   const { callsign, region, status, sellerId, leadTech } = req.body;
   const id = `node-${Date.now()}`;
-  
+
   try {
     await run(
-      `INSERT INTO depot_nodes (id, callsign, region, status, seller_id, lead_tech, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+      `INSERT INTO depot_nodes (id, callsign, region, status, seller_id, lead_tech, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
       [id, callsign, region, status, sellerId, leadTech]
     );
     res.json({ success: true, nodeId: id });
@@ -410,7 +402,7 @@ app.listen(PORT, () => {
   console.log(`RIGLOCK Backend running on port ${PORT}`);
   console.log(`Database: ${dbPath}`);
   console.log('Free hosting: Render.com or any Node.js compatible host');
-  
+
   initDatabase().then(() => {
     console.log('Database initialized');
   }).catch(err => {
